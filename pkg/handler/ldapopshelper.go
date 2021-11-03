@@ -100,15 +100,25 @@ func (l LDAPOpsHelper) Bind(h LDAPOpsHandler, bindDN, bindSimplePw string, conn 
 		parts := strings.Split(strings.TrimSuffix(bindDN, baseDN), ",")
 		groupName := ""
 		userName := ""
-		if len(parts) == 1 {
-			userName = strings.TrimPrefix(parts[0], h.GetBackend().NameFormat+"=")
-		} else if len(parts) == 2 {
+		if len(parts) == 2 {
 			userName = strings.TrimPrefix(parts[0], h.GetBackend().NameFormat+"=")
 			groupName = strings.TrimPrefix(parts[1], h.GetBackend().GroupFormat+"=")
 		} else {
 			h.GetLog().V(2).Info("BindDN should have only one or two parts", "binddn", bindDN, "numparts", len(parts))
 			return ldap.LDAPResultInvalidCredentials, nil
 		}
+
+		
+		if strings.EqualFold(groupName, "") {
+			h.GetLog().V(2).Info("BindDN should have a group")
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
+
+		if !strings.EqualFold(groupName, "svcaccts") {
+			h.GetLog().V(2).Info("BindDN should be in svcaccts group")
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
+
 
 		// find the user
 		var foundUser bool // = false
@@ -120,19 +130,17 @@ func (l LDAPOpsHelper) Bind(h LDAPOpsHandler, bindDN, bindSimplePw string, conn 
 		// find the group
 		var group config.Group // = nil
 		var foundGroup bool    // = false
-		if groupName != "" {
-			foundGroup, group, _ = h.FindGroup(groupName)
-			if !foundGroup {
-				h.GetLog().V(2).Info("Group not found", "groupname", groupName)
-				return ldap.LDAPResultInvalidCredentials, nil
-			}
+		
+		foundGroup, group, _ = h.FindGroup(groupName)
+		if !foundGroup {
+			h.GetLog().V(2).Info("Group not found", "groupname", groupName)
+			return ldap.LDAPResultInvalidCredentials, nil
 		}
+		
 		// validate group membership
-		if foundGroup {
-			if user.PrimaryGroup != group.GIDNumber {
-				h.GetLog().V(2).Info("primary group mismatch", "username", userName, "primarygroup", user.PrimaryGroup, "groupid", group.GIDNumber)
-				return ldap.LDAPResultInvalidCredentials, nil
-			}
+		if user.PrimaryGroup != group.GIDNumber {
+			h.GetLog().V(2).Info("primary group mismatch", "username", userName, "primarygroup", user.PrimaryGroup, "groupid", group.GIDNumber)
+			return ldap.LDAPResultInvalidCredentials, nil
 		}
 	}
 
