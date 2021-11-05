@@ -56,6 +56,9 @@ COPY --from=build /app/scripts/docker/default-config.cfg /app/docker/
 # Install ldapsearch for container health checks, then ensure ldapsearch is installed
 RUN apk update && apk add --no-cache dumb-init openldap-clients && which ldapsearch && rm -rf /var/cache/apk/*
 
+ARG arg_k8s_application_commit arg_k8s_application_version
+ENV K8S_APPLICATION_COMMIT=$arg_k8s_application_commit K8S_APPLICATION_VERSION=$arg_k8s_application_version
+
 # Install init
 
 # Expose web and LDAP ports
