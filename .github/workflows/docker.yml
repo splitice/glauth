@@ -3,39 +3,53 @@ name: docker
 on:
   pull_request:
   push:
-    branches:
-      - master
-  release:
-    types:
-      - created
-      - edited
+    tags: v?[0-9]+.[0-9]+.[0-9]+
+
+env:
+  # TODO: Change variable to your image's name.
+  IMAGE_NAME: glauth
 
 jobs:
   build-push:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-    env:
-      BUILDX_VERSION: v0.4.1
-      DOCKER_CLI_EXPERIMENTAL: enabled
     steps:
       - uses: actions/checkout@v2
-      - name: set up multiarch builder
+
+      - name: Build image
         run: |
-          set -ex
-          curl -sSL https://get.docker.com | bash
-          mkdir -p ~/.docker/cli-plugins
-          curl -sSLo ~/.docker/cli-plugins/buildx https://github.com/docker/buildx/releases/download/$BUILDX_VERSION/buildx-$BUILDX_VERSION.linux-amd64
-          chmod +x ~/.docker/cli-plugins/buildx
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-          docker buildx create --name multiarch
-          docker buildx use multiarch
-          docker buildx inspect --bootstrap
-          curl -sSL https://gist.githubusercontent.com/ArturKlauser/0f0293c62f5626df0261ac994d8a46af/raw/33ef25b8a93f15310f0a4013deca3f8d20fc00a7/check-qemu-binfmt.sh | bash
+          docker build . --build-arg arg_k8s_application_commit=${{ github.sha }} --build-arg arg_k8s_application_version=${{ github.ref }} --tag $IMAGE_NAME
+
       - name: log in github registry
-        run: docker login --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" docker.pkg.github.com
-      - name: build multiarch images
-        run: docker buildx build -t docker.pkg.github.com/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]'):$(echo ${{ github.ref }} | tr / -) --platform linux/amd64,linux/arm64,linux/arm/v7 .
-      - name: push multiarch images
-        if: github.event.release.tag_name
-        run: docker buildx build --push -t docker.pkg.github.com/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]'):${{ github.event.release.tag_name }} --platform linux/amd64,linux/arm64,linux/arm/v7 .
+        run: echo "${{ secrets.dockerhub_token }}" | docker login -u splitice --password-stdin
+
+      - name: Branch name
+        id: branch_name
+        run: |
+          echo ::set-output name=SOURCE_NAME::${GITHUB_REF#refs/*/}
+          echo ::set-output name=SOURCE_BRANCH::${GITHUB_REF#refs/heads/}
+          echo ::set-output name=SOURCE_TAG::${GITHUB_REF#refs/tags/}
+
+      - name: Push image
+        run: |
+          IMAGE_ID=splitice/$IMAGE_NAME
+
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+
+          # tag name
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+          [ "$VERSION" == "main" ] && VERSION=latest
+
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=$VERSION
+
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
+          docker push $IMAGE_ID:$VERSION
+
+          if [[ "$VERSION" == "latest" ]]; then
+            docker tag $IMAGE_NAME $IMAGE_ID:git-${{ github.sha }}
+            docker push $IMAGE_ID:git-${{ github.sha }}
+          fi
+
