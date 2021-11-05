@@ -21,7 +21,7 @@ echo "Starting GLauth now.";
 echo "";
 
 # Run app
-/app/glauth -c /app/config/config.cfg
+/app/glauth -c '/app/config/'$(readlink /app/config/config.cfg)
 
 echo ""
 echo "GLauth has exited."
