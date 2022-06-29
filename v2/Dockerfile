@@ -35,7 +35,7 @@ RUN /app/glauth --version
 # Run Step
 #################
 
-FROM gcr.io/distroless/base-debian10 as run
+FROM alpine as run
 LABEL maintainers="Ben Yanke <ben@benyanke.com>, Jörn Friedrich Dreyer <jfd@butonic.de>, Chris F Ravenscroft <chris@voilaweb.com>"
 
 # Copy binary from build container
